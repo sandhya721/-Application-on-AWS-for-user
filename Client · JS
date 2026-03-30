@@ -1,0 +1,73 @@
+import axios from 'axios'
+
+const BASE_URL = import.meta.env.VITE_API_URL || ''
+
+const api = axios.create({
+  baseURL: `${BASE_URL}/api`,
+  timeout: 30000,
+})
+
+// Attach JWT token to every request
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token')
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
+// Handle 401 globally
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err.response?.status === 401) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      window.location.href = '/login'
+    }
+    return Promise.reject(err)
+  }
+)
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+export const authAPI = {
+  login: (email, name) => api.post('/auth/login', { email, name }),
+  me: () => api.get('/auth/me'),
+}
+
+// ─── Jobs ─────────────────────────────────────────────────────────────────────
+export const jobsAPI = {
+  list: () => api.get('/jobs'),
+  get: (id) => api.get(`/jobs/${id}`),
+  create: (title) => api.post('/jobs/create', { title }),
+  delete: (id) => api.delete(`/jobs/${id}`),
+
+  uploadZip: (jobId, file, onProgress) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post(`/jobs/${jobId}/upload`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (e) => {
+        if (onProgress) onProgress(Math.round((e.loaded / e.total) * 100))
+      },
+      timeout: 600000, // 10 min for large uploads
+    })
+  },
+
+  uploadPdf: (jobId, file, onProgress) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post(`/jobs/${jobId}/upload-pdf`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (e) => {
+        if (onProgress) onProgress(Math.round((e.loaded / e.total) * 100))
+      },
+      timeout: 600000,
+    })
+  },
+
+  start: (jobId) => api.post(`/jobs/${jobId}/start`),
+  extract: (jobId) => api.post(`/jobs/${jobId}/extract`),
+  analyze: (jobId) => api.post(`/jobs/${jobId}/analyze`),
+  download: (jobId) => api.get(`/jobs/${jobId}/download`),
+}
+
+export default api
